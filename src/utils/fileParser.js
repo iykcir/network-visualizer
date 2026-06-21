@@ -7,7 +7,9 @@ export function parseFile(file) {
     if (ext === 'csv' || ext === 'tsv') {
       Papa.parse(file, {
         header: true,
-        skipEmptyLines: true,
+        skipEmptyLines: 'greedy',
+        transformHeader: h => h.trim().replace(/^﻿/, ''), // trim + strip BOM
+        transform: val => (typeof val === 'string' ? val.trim() : val),
         complete: ({ data, meta }) => resolve({ rows: data, headers: meta.fields ?? [] }),
         error: (err) => reject(new Error(err.message)),
       });

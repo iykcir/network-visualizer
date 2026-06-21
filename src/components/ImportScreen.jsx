@@ -15,7 +15,7 @@ export default function ImportScreen() {
   const requiredFields = [
     { key: 'name', label: 'Person Name', hint: 'Full name column' },
     { key: 'city', label: 'City', hint: 'City or location column' },
-    { key: 'ministry', label: 'Ministry', hint: 'Ministry or team name column' },
+    { key: 'ministry', label: 'Ministry', hint: 'Ministry name — multiple values per cell OK (separate with , or ;)' },
     { key: 'role', label: 'Role', hint: 'Role (driver / team / member)' },
   ];
 

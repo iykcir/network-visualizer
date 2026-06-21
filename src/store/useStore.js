@@ -45,19 +45,29 @@ const useStore = create(
 
       importData: (rawRows, rawHeaders, mapping) => {
         const people = rawRows
-          .map(row => {
+          .flatMap(row => {
             const name = String(row[mapping.name] ?? '').trim();
             const city = String(row[mapping.city] ?? '').trim();
-            const ministryName = String(row[mapping.ministry] ?? '').trim();
             const role = normalizeRole(row[mapping.role]);
-            if (!name || !city || !ministryName) return null;
+            if (!name || !city) return [];
+
+            // Support semicolon, pipe, or comma-separated ministries in one cell
+            const ministryRaw = String(row[mapping.ministry] ?? '').trim();
+            const ministries = ministryRaw
+              .split(/\s*[;|,]\s*/)
+              .map(m => m.trim())
+              .filter(Boolean);
+
+            // Fall back to the raw value if splitting produced nothing
+            const ministryList = ministries.length > 0 ? ministries : [ministryRaw];
+            if (!ministryList[0]) return [];
 
             const extra = {};
             (mapping.additionalFields ?? []).forEach(f => {
               extra[f.label] = row[f.column];
             });
 
-            return {
+            return ministryList.map(ministryName => ({
               id: uid(),
               name,
               city,
@@ -68,9 +78,8 @@ const useStore = create(
               _originalCity: city,
               _originalMinistry: ministryName,
               _originalRole: role,
-            };
-          })
-          .filter(Boolean);
+            }));
+          });
 
         set({ rawRows, rawHeaders, mapping, people });
       },
