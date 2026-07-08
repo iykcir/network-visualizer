@@ -12,7 +12,13 @@ export default function Header() {
   const setSearchQuery = useStore(s => s.setSearchQuery);
   const setShowExport = useStore(s => s.setShowExport);
   const reset = useStore(s => s.reset);
+  const setShowImport = useStore(s => s.setShowImport);
   const getChanges = useStore(s => s.getChanges);
+  const apiConfig = useStore(s => s.apiConfig);
+  const loadFromAPI = useStore(s => s.loadFromAPI);
+  const apiLoading = useStore(s => s.apiLoading);
+
+  const hasApiKey = !!apiConfig?.apiKey;
 
   const allCities = getAllCities();
   const changes = getChanges();
@@ -60,7 +66,25 @@ export default function Header() {
             {people.length.toLocaleString()} people · {allCities.length} cities
           </div>
 
-          {/* New import */}
+          {/* Refresh from API */}
+          {hasApiKey && (
+            <button
+              onClick={() => loadFromAPI(true)}
+              disabled={apiLoading}
+              className="text-slate-400 hover:text-white text-xs transition-colors disabled:opacity-50"
+              title="Reload data from membership API"
+            >
+              {apiLoading ? 'Refreshing…' : 'Refresh from API'}
+            </button>
+          )}
+
+          {/* Remap / New import */}
+          <button
+            onClick={() => setShowImport(true)}
+            className="text-slate-400 hover:text-white text-xs transition-colors"
+          >
+            Remap columns
+          </button>
           <button
             onClick={reset}
             className="text-slate-400 hover:text-white text-xs transition-colors"

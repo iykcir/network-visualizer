@@ -7,12 +7,13 @@ import ExportPanel from './components/ExportPanel';
 export default function App() {
   const people = useStore(s => s.people);
   const showExport = useStore(s => s.showExport);
+  const showImport = useStore(s => s.showImport);
 
-  const hasData = people.length > 0;
+  const onBoard = people.length > 0 && !showImport;
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-slate-100">
-      {hasData ? (
+      {onBoard ? (
         <>
           <Header />
           <Board />

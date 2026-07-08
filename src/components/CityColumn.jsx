@@ -1,15 +1,15 @@
-import MinistryCard from './MinistryCard';
+import CityDAG from './CityDAG';
 import useStore from '../store/useStore';
 
-export default function CityColumn({ city, cityColor }) {
+export default function CityColumn({ region, city, cityColor }) {
   const getMinistriesInCity = useStore(s => s.getMinistriesInCity);
   const getCityStats = useStore(s => s.getCityStats);
 
-  const ministries = getMinistriesInCity(city);
-  const stats = getCityStats(city);
+  const ministries = getMinistriesInCity(city, region);
+  const stats = getCityStats(city, region);
 
   return (
-    <div className="flex flex-col flex-shrink-0 w-72 min-h-0">
+    <div className="flex flex-col flex-shrink-0 w-72">
       {/* City header */}
       <div
         className="rounded-t-xl px-4 py-3 mb-2"
@@ -20,6 +20,12 @@ export default function CityColumn({ city, cityColor }) {
           <span>{ministries.length} {ministries.length === 1 ? 'ministry' : 'ministries'}</span>
           <span>·</span>
           <span>{stats.total} people</span>
+          {stats.children > 0 && (
+            <>
+              <span>·</span>
+              <span>{stats.children} children</span>
+            </>
+          )}
         </div>
 
         {/* Mini breakdown */}
@@ -30,21 +36,8 @@ export default function CityColumn({ city, cityColor }) {
         </div>
       </div>
 
-      {/* Ministry cards */}
-      <div className="flex-1 overflow-y-auto space-y-2 pr-1 pb-4">
-        {ministries.length === 0 ? (
-          <div className="text-center text-slate-500 text-sm py-8">No ministries</div>
-        ) : (
-          ministries.map(m => (
-            <MinistryCard
-              key={m}
-              city={city}
-              ministryName={m}
-              cityColor={cityColor}
-            />
-          ))
-        )}
-      </div>
+      {/* Ministry DAG */}
+      <CityDAG region={region} city={city} cityColor={cityColor} />
     </div>
   );
 }

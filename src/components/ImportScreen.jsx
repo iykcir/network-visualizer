@@ -1,12 +1,18 @@
 import { useState, useRef } from 'react';
-import useStore from '../store/useStore';
+import useStore, { defaultNormalizeRole } from '../store/useStore';
 import { parseFile } from '../utils/fileParser';
+
+// useStore.getState() gives synchronous access to fresh state after an async call
+const getStoreState = () => useStore.getState();
+
 
 const AGGREGATES = ['sum', 'avg', 'count'];
 
 export default function ImportScreen() {
-  const { rawHeaders, rawRows, mapping, setRawData, setMapping, importData } = useStore();
-  const [step, setStep] = useState('upload'); // 'upload' | 'map'
+  const { rawHeaders, rawRows, mapping, setRawData, setMapping, importData, setShowImport, people, apiConfig, setApiConfig, loadFromAPI, apiLoading, apiError } = useStore();
+  const hasExistingData = people.length > 0;
+  const [step, setStep] = useState(rawRows.length > 0 ? 'map' : 'upload');
+  const [uploadTab, setUploadTab] = useState('file'); // 'file' | 'api'
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
   const [additionalFields, setAdditionalFields] = useState(mapping.additionalFields ?? []);
@@ -14,9 +20,15 @@ export default function ImportScreen() {
 
   const requiredFields = [
     { key: 'name', label: 'Person Name', hint: 'Full name column' },
-    { key: 'city', label: 'City', hint: 'City or location column' },
-    { key: 'ministry', label: 'Ministry', hint: 'Ministry name — multiple values per cell OK (separate with , or ;)' },
+    { key: 'city', label: 'City', hint: 'City or location — multiple OK (separate with ;)' },
+    { key: 'ministry', label: 'Ministry', hint: 'Ministry name — multiple OK (separate with , or ;)' },
     { key: 'role', label: 'Role', hint: 'Role (driver / team / member)' },
+  ];
+
+  const optionalFields = [
+    { key: 'region', label: 'Region', hint: 'Region or district — groups cities into swim lanes' },
+    { key: 'peerClass', label: 'Peer Class', hint: 'Shown after name on each card (Name | Class)' },
+    { key: 'children', label: 'Children', hint: 'Number of children — summed per ministry card' },
   ];
 
   async function handleFile(file) {
@@ -67,43 +79,130 @@ export default function ImportScreen() {
       return;
     }
     importData(rawRows, rawHeaders, m);
+    if (hasExistingData) setShowImport(false);
   }
 
   const preview = rawRows.slice(0, 3);
 
+  async function handleConnectAPI() {
+    await loadFromAPI();
+    // Read fresh state — loadFromAPI sets rawRows on success, apiError on failure
+    const { rawRows: rows, apiError: err } = getStoreState();
+    if (rows.length > 0 && !err) setStep('map');
+  }
+
   if (step === 'upload') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8">
-        <div className="text-center mb-10">
+        <div className="text-center mb-8">
           <div className="text-5xl mb-4">🌐</div>
           <h1 className="text-3xl font-bold text-white mb-2">Network Visualizer</h1>
           <p className="text-slate-400 text-lg">Plan and visualize your ministry org structure</p>
         </div>
 
-        <div
-          className={`w-full max-w-lg border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer
-            ${dragging ? 'border-indigo-400 bg-indigo-500/10' : 'border-slate-600 hover:border-slate-500 bg-slate-800/50'}`}
-          onDragOver={e => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-          onClick={() => fileRef.current.click()}
-        >
-          <div className="text-4xl mb-4">📂</div>
-          <p className="text-white font-semibold text-lg mb-1">Drop your file here</p>
-          <p className="text-slate-400 text-sm">CSV, Excel (.xlsx), or .ods</p>
-          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.ods" className="hidden" onChange={onFileChange} />
+        {/* Source tabs */}
+        <div className="w-full max-w-lg mb-4">
+          <div className="flex bg-slate-800 rounded-xl p-1 gap-1">
+            <button
+              onClick={() => setUploadTab('file')}
+              className={`flex-1 text-sm font-medium rounded-lg py-2 transition-colors ${uploadTab === 'file' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Upload file
+            </button>
+            <button
+              onClick={() => setUploadTab('api')}
+              className={`flex-1 text-sm font-medium rounded-lg py-2 transition-colors ${uploadTab === 'api' ? 'bg-slate-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Membership API
+            </button>
+          </div>
         </div>
 
-        {error && (
-          <div className="mt-4 text-red-400 text-sm bg-red-900/30 rounded-lg px-4 py-2 max-w-lg w-full">
-            {error}
+        {uploadTab === 'file' ? (
+          <>
+            <div
+              className={`w-full max-w-lg border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer
+                ${dragging ? 'border-indigo-400 bg-indigo-500/10' : 'border-slate-600 hover:border-slate-500 bg-slate-800/50'}`}
+              onDragOver={e => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              onClick={() => fileRef.current.click()}
+            >
+              <div className="text-4xl mb-4">📂</div>
+              <p className="text-white font-semibold text-lg mb-1">Drop your file here</p>
+              <p className="text-slate-400 text-sm">CSV, Excel (.xlsx), or .ods</p>
+              <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.ods" className="hidden" onChange={onFileChange} />
+            </div>
+
+            {error && (
+              <div className="mt-4 text-red-400 text-sm bg-red-900/30 rounded-lg px-4 py-2 max-w-lg w-full">
+                {error}
+              </div>
+            )}
+
+            <div className="mt-8 text-slate-500 text-sm text-center max-w-md">
+              <p className="font-medium text-slate-400 mb-2">Expected columns (exact names don't matter):</p>
+              <p>Person name · City · Ministry or team · Role (driver / team / member)</p>
+            </div>
+          </>
+        ) : (
+          <div className="w-full max-w-lg bg-slate-800 rounded-2xl p-6">
+            <p className="text-slate-400 text-sm mb-5">
+              Connect directly to the membership app. Requires an API key stored on your membership profile.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Membership server URL</label>
+                <input
+                  type="text"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-400 transition-colors"
+                  placeholder="/membership-api"
+                  value={apiConfig.proxyBase}
+                  onChange={e => setApiConfig({ ...apiConfig, proxyBase: e.target.value })}
+                />
+                <p className="text-slate-500 text-xs mt-1">
+                  Leave as <span className="font-mono">/membership-api</span> when running both apps locally
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">API key</label>
+                <input
+                  type="password"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-400 transition-colors"
+                  placeholder="Your api_key attribute value"
+                  value={apiConfig.apiKey}
+                  onChange={e => setApiConfig({ ...apiConfig, apiKey: e.target.value })}
+                />
+                <p className="text-slate-500 text-xs mt-1">
+                  Set via <span className="font-mono">PUT /people/&#123;id&#125;/attributes?api_key=...</span> in membership
+                </p>
+              </div>
+
+              {apiError && (
+                <div className="text-red-400 text-sm bg-red-900/30 rounded-lg px-4 py-2">
+                  {apiError}
+                </div>
+              )}
+
+              <button
+                onClick={handleConnectAPI}
+                disabled={!apiConfig.apiKey || apiLoading}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold rounded-xl py-3 text-sm transition-colors"
+              >
+                {apiLoading ? 'Loading…' : 'Load from membership →'}
+              </button>
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-slate-700">
+              <p className="text-slate-500 text-xs">
+                All attributes are loaded. You'll map columns to visualizer fields in the next step.
+                Known fields are pre-filled: <span className="font-mono text-slate-400">church → city, ministry_level → role</span>, etc.
+              </p>
+            </div>
           </div>
         )}
-
-        <div className="mt-8 text-slate-500 text-sm text-center max-w-md">
-          <p className="font-medium text-slate-400 mb-2">Expected columns (exact names don't matter):</p>
-          <p>Person name · City · Ministry or team · Role (driver / team / member)</p>
-        </div>
       </div>
     );
   }
@@ -113,10 +212,10 @@ export default function ImportScreen() {
     <div className="flex-1 overflow-y-auto p-8">
       <div className="max-w-2xl mx-auto">
         <button
-          onClick={() => setStep('upload')}
+          onClick={() => hasExistingData ? setShowImport(false) : setStep('upload')}
           className="text-slate-400 hover:text-white text-sm mb-6 flex items-center gap-1 transition-colors"
         >
-          ← Back
+          ← {hasExistingData ? 'Back to board' : 'Back'}
         </button>
 
         <h2 className="text-2xl font-bold text-white mb-1">Map your columns</h2>
@@ -176,7 +275,71 @@ export default function ImportScreen() {
           </div>
         </div>
 
-        {/* Additional fields */}
+        {/* Role mapping — shown when role column is selected */}
+        {mapping.role && (() => {
+          const uniqueVals = [...new Set(
+            rawRows.map(r => String(r[mapping.role] ?? '').trim()).filter(Boolean)
+          )].sort();
+          if (uniqueVals.length === 0) return null;
+          return (
+            <div className="bg-slate-800 rounded-xl p-5 mb-4">
+              <h3 className="text-white font-semibold mb-1">Role mapping</h3>
+              <p className="text-slate-400 text-xs mb-4">
+                Map each raw value in your role column to Driver, Team, or Member.
+              </p>
+              <div className="space-y-2">
+                {uniqueVals.map(val => {
+                  const current = (mapping.roleOverrides ?? {})[val] ?? defaultNormalizeRole(val);
+                  return (
+                    <div key={val} className="flex items-center gap-3">
+                      <span className="flex-1 text-sm font-mono bg-slate-700 text-slate-200 rounded px-2 py-1.5 truncate">
+                        {val}
+                      </span>
+                      <span className="text-slate-500 text-xs flex-shrink-0">→</span>
+                      <select
+                        className="w-32 bg-slate-700 text-white rounded-lg px-3 py-1.5 text-sm border border-slate-600 focus:border-indigo-400 focus:outline-none flex-shrink-0"
+                        value={current}
+                        onChange={e => setMapping({
+                          ...mapping,
+                          roleOverrides: { ...(mapping.roleOverrides ?? {}), [val]: e.target.value },
+                        })}
+                      >
+                        <option value="driver">Driver</option>
+                        <option value="team">Team</option>
+                        <option value="member">Member</option>
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Optional fields */}
+        <div className="bg-slate-800 rounded-xl p-5 mb-4">
+          <h3 className="text-white font-semibold mb-4">Optional fields</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {optionalFields.map(f => (
+              <div key={f.key}>
+                <label className="block text-xs text-slate-400 mb-1">{f.label}</label>
+                <select
+                  className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm border border-slate-600 focus:border-indigo-400 focus:outline-none"
+                  value={mapping[f.key] || ''}
+                  onChange={e => setMapping({ ...mapping, [f.key]: e.target.value })}
+                >
+                  <option value="">— not mapped —</option>
+                  {rawHeaders.map(h => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+                <p className="text-slate-500 text-xs mt-0.5">{f.hint}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Additional stats */}
         <div className="bg-slate-800 rounded-xl p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div>

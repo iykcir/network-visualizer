@@ -2,13 +2,13 @@ import { useState } from 'react';
 import RoleSection from './RoleSection';
 import useStore, { ROLE_ORDER } from '../store/useStore';
 
-export default function MinistryCard({ city, ministryName, cityColor }) {
+export default function MinistryCard({ region, city, ministryName, cityColor }) {
   const getPeopleInMinistry = useStore(s => s.getPeopleInMinistry);
   const getMinistryStats = useStore(s => s.getMinistryStats);
   const [collapsed, setCollapsed] = useState(false);
 
-  const people = getPeopleInMinistry(city, ministryName);
-  const stats = getMinistryStats(city, ministryName);
+  const people = getPeopleInMinistry(city, ministryName, region);
+  const stats = getMinistryStats(city, ministryName, region);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-shrink-0">
@@ -24,6 +24,9 @@ export default function MinistryCard({ city, ministryName, cityColor }) {
             <StatBadge color="amber" count={stats.driver} label="D" />
             <StatBadge color="sky" count={stats.team} label="T" />
             <StatBadge color="emerald" count={stats.member} label="M" />
+            {stats.children > 0 && (
+              <StatBadge color="violet" count={stats.children} label="C" />
+            )}
             <span className="text-slate-400 text-xs ml-1">· {stats.total} total</span>
           </div>
         </div>
@@ -36,6 +39,7 @@ export default function MinistryCard({ city, ministryName, cityColor }) {
           {ROLE_ORDER.map(role => (
             <RoleSection
               key={role}
+              region={region}
               city={city}
               ministryName={ministryName}
               role={role}
@@ -66,6 +70,7 @@ function StatBadge({ color, count, label }) {
     amber: 'text-amber-700 bg-amber-50',
     sky: 'text-sky-700 bg-sky-50',
     emerald: 'text-emerald-700 bg-emerald-50',
+    violet: 'text-violet-700 bg-violet-50',
   };
   return (
     <span className={`text-xs rounded px-1 font-medium ${colors[color]}`}>

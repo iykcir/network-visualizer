@@ -1,8 +1,10 @@
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { ROLE_STYLES } from '../utils/colors';
+import useStore from '../store/useStore';
 
-export default function PersonChip({ person, compact = false }) {
+export default function PersonChip({ person }) {
+  const setSelectedPerson = useStore(s => s.setSelectedPerson);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: person.id,
     data: { person },
@@ -16,6 +18,7 @@ export default function PersonChip({ person, compact = false }) {
   };
 
   const { chip } = ROLE_STYLES[person.role];
+  const label = person.peerClass ? `${person.name} | ${person.peerClass}` : person.name;
 
   return (
     <span
@@ -23,14 +26,14 @@ export default function PersonChip({ person, compact = false }) {
       style={style}
       {...listeners}
       {...attributes}
-      title={`${person.name} — ${person.role}`}
+      title={`${label} — ${person.role}`}
+      onClick={(e) => { e.stopPropagation(); setSelectedPerson(person.id); }}
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border select-none transition-shadow
         ${chip}
         ${isDragging ? '' : 'hover:shadow-sm hover:scale-105'}
-        ${compact ? '' : ''}
       `}
     >
-      {person.name}
+      {label}
     </span>
   );
 }
@@ -38,11 +41,12 @@ export default function PersonChip({ person, compact = false }) {
 // Standalone chip for the drag overlay (no drag hooks — just visual)
 export function ChipPreview({ person }) {
   const { chip } = ROLE_STYLES[person.role];
+  const label = person.peerClass ? `${person.name} | ${person.peerClass}` : person.name;
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border shadow-xl rotate-2 ${chip}`}
     >
-      {person.name}
+      {label}
     </span>
   );
 }
