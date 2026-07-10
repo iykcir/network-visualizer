@@ -8,7 +8,7 @@ export function parseFile(file) {
       Papa.parse(file, {
         header: true,
         skipEmptyLines: 'greedy',
-        transformHeader: h => h.trim().replace(/^﻿/, ''), // trim + strip BOM
+        transformHeader: h => h.trim().replace(/^\uFEFF/, ''), // trim + strip BOM
         transform: val => (typeof val === 'string' ? val.trim() : val),
         complete: ({ data, meta }) => resolve({ rows: data, headers: meta.fields ?? [] }),
         error: (err) => reject(new Error(err.message)),

@@ -4,7 +4,6 @@ import { getCityColor } from '../utils/colors';
 export default function Header() {
   const people = useStore(s => s.people);
   const getAllCities = useStore(s => s.getAllCities);
-  const getVisibleCities = useStore(s => s.getVisibleCities);
   const selectedCities = useStore(s => s.selectedCities);
   const searchQuery = useStore(s => s.searchQuery);
   const toggleCityFilter = useStore(s => s.toggleCityFilter);

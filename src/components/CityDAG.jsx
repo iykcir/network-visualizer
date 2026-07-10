@@ -9,6 +9,8 @@ import useStore from '../store/useStore';
 const NODE_W = 260;
 const NODE_H = 240;
 
+const EMPTY_EDGES = [];
+
 function computeLayout(ministries, edges) {
   if (ministries.length === 0) return { positions: {}, canvasW: 0, canvasH: 0 };
 
@@ -46,13 +48,16 @@ export default function CityDAG({ city, region, cityColor }) {
 
   const cityKey = `${region ?? ''}::${city}`;
   const ministries = getMinistriesInCity(city, region);
-  const edges = ministryEdges[cityKey] ?? [];
+  const edges = ministryEdges[cityKey] ?? EMPTY_EDGES;
+
+  // ministries/edges are new array references on every render, so key them
+  // by content to avoid re-running the dagre layout unnecessarily.
+  const ministriesKey = ministries.join('\x00');
+  const edgesKey = useMemo(() => JSON.stringify(edges), [edges]);
 
   const { positions, canvasW, canvasH } = useMemo(
     () => computeLayout(ministries, edges),
-    // recompute when ministry list or edges change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ministries.join('\x00'), JSON.stringify(edges)],
+    [ministriesKey, edgesKey], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const handleNodeClick = useCallback((m) => {
