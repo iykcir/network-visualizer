@@ -36,6 +36,27 @@ function effectiveRegionFilter(city, region, cityRegionOverrides) {
   return region;
 }
 
+// Membership data stores children_count on each spouse individually, so summing
+// it per-person double-counts every couple's kids. Mirrors the spouse-pairing
+// logic in RoleSection.jsx so a couple's count is only added once.
+function sumChildren(people) {
+  const used = new Set();
+  let sum = 0;
+  for (const p of people) {
+    if (used.has(p.id)) continue;
+    used.add(p.id);
+    sum += p.childrenCount || 0;
+    const spouseMemId = String(p._raw?.spouse ?? '').trim();
+    if (spouseMemId) {
+      const spouse = people.find(
+        q => !used.has(q.id) && String(q._raw?._membership_id ?? '') === spouseMemId
+      );
+      if (spouse) used.add(spouse.id);
+    }
+  }
+  return sum;
+}
+
 const useStore = create(
   persist(
     (set, get) => ({
@@ -123,6 +144,14 @@ const useStore = create(
       setMapping: (mapping) => set({ mapping }),
 
       importData: (rawRows, rawHeaders, mapping) => {
+        // Some sources (e.g. the membership API) store children as a ';'-joined
+        // list of linked child IDs rather than a literal count — Number() on
+        // that string is either NaN or, worse, a single child's ID misread as
+        // a huge count. Detect list-shaped columns (any row has a separator)
+        // and count entries instead of parsing the string as a number.
+        const childrenIsList = mapping.children &&
+          rawRows.some(r => /[;|]/.test(String(r[mapping.children] ?? '')));
+
         // Pass 1 — create one entry per person × city × ministry × region combination
         const allEntries = rawRows.flatMap(row => {
           const name = String(row[mapping.name] ?? '').trim();
@@ -142,7 +171,10 @@ const useStore = create(
           const ministryList = ministryRaw.split(/\s*[;|,]\s*/).map(m => m.trim()).filter(Boolean);
           if (!ministryList[0]) return [];
 
-          const childrenCount = mapping.children ? Number(row[mapping.children] ?? 0) || 0 : 0;
+          const childrenRaw = mapping.children ? String(row[mapping.children] ?? '').trim() : '';
+          const childrenCount = !childrenRaw ? 0 : (childrenIsList
+            ? childrenRaw.split(/\s*[;|]\s*/).filter(Boolean).length
+            : (Number(childrenRaw) || 0));
           const peerClass = mapping.peerClass ? String(row[mapping.peerClass] ?? '').trim() : '';
 
           const extra = {};
@@ -376,7 +408,7 @@ const useStore = create(
         const counts = { driver: 0, team: 0, member: 0, total: people.length };
         people.forEach(p => { counts[p.role] = (counts[p.role] || 0) + 1; });
 
-        const children = people.reduce((sum, p) => sum + (p.childrenCount || 0), 0);
+        const children = sumChildren(people);
 
         const { mapping } = get();
         const aggregates = (mapping.additionalFields ?? []).map(f => {
@@ -403,7 +435,7 @@ const useStore = create(
         return {
           total: unique.length,
           ministries: ministries.length,
-          children: unique.reduce((sum, p) => sum + (p.childrenCount || 0), 0),
+          children: sumChildren(unique),
           drivers: unique.filter(p => p.role === 'driver').length,
           team: unique.filter(p => p.role === 'team').length,
           members: unique.filter(p => p.role === 'member').length,
@@ -412,18 +444,20 @@ const useStore = create(
 
       getRegionStats: (region) => {
         const { cityRegionOverrides, selectedCities } = get();
+        // Use _originalCity/_originalRegion (structural layout) to stay consistent
+        // with getVisibleCitiesInRegion so the auto-switch and isEmpty checks agree.
         let people = get().people.filter(p =>
-          cityInRegion(p.city, p.region ?? '', region, cityRegionOverrides)
+          cityInRegion(p._originalCity, p._originalRegion ?? '', region, cityRegionOverrides)
         );
         if (selectedCities.length > 0) {
-          people = people.filter(p => selectedCities.includes(p.city));
+          people = people.filter(p => selectedCities.includes(p._originalCity));
         }
         const unique = [...new Map(people.map(p => [p._rowId, p])).values()];
-        const cities = [...new Set(people.map(p => p.city))];
+        const cities = [...new Set(people.map(p => p._originalCity))];
         return {
           total: unique.length,
           cities: cities.length,
-          children: unique.reduce((sum, p) => sum + (p.childrenCount || 0), 0),
+          children: sumChildren(unique),
           drivers: unique.filter(p => p.role === 'driver').length,
           team: unique.filter(p => p.role === 'team').length,
           members: unique.filter(p => p.role === 'member').length,
@@ -441,14 +475,25 @@ const useStore = create(
     }),
     {
       name: 'network-visualizer-v1',
-      version: 1,
-      // v0→v1: cityRegionOverrides values changed from string to string[].
-      // Normalize any stored strings so the spread operator doesn't explode them.
+      version: 2,
       migrate: (persisted) => {
+        // v0→v1: plain string per city → string[]
+        // v1→v2: garbled char-arrays from old string spreading (e.g. [...'westcoast']
+        //        = ['w','e','s','t',...]) → clear override and revert to natural region.
+        //        Detection: all array elements are single characters.
         if (persisted.cityRegionOverrides) {
           const fixed = {};
           Object.entries(persisted.cityRegionOverrides).forEach(([city, val]) => {
-            fixed[city] = Array.isArray(val) ? val : (val ? [val] : []);
+            let regions;
+            if (typeof val === 'string') {
+              regions = val ? [val] : [];
+            } else if (Array.isArray(val)) {
+              const garbled = val.every(v => typeof v === 'string' && v.length === 1);
+              regions = garbled ? [] : val.filter(v => typeof v === 'string' && v.length > 0);
+            } else {
+              regions = [];
+            }
+            if (regions.length > 0) fixed[city] = regions;
           });
           persisted.cityRegionOverrides = fixed;
         }
