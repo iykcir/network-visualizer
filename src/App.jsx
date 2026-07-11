@@ -5,11 +5,14 @@ import Board from './components/Board';
 import ExportPanel from './components/ExportPanel';
 
 export default function App() {
+  const hasHydrated = useStore(s => s.hasHydrated);
   const people = useStore(s => s.people);
   const showExport = useStore(s => s.showExport);
   const showImport = useStore(s => s.showImport);
 
   const onBoard = people.length > 0 && !showImport;
+
+  if (!hasHydrated) return null;
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-slate-100">

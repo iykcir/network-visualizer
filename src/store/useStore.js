@@ -1,5 +1,14 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval';
+
+// localStorage caps out around 5-10MB, which imported membership data can
+// exceed; IndexedDB (via idb-keyval) has a much higher quota.
+const idbStorage = {
+  getItem: async (name) => (await idbGet(name)) ?? null,
+  setItem: (name, value) => idbSet(name, value),
+  removeItem: (name) => idbDel(name),
+};
 
 const ROLE_ORDER = ['driver', 'team', 'member'];
 
@@ -60,6 +69,12 @@ function sumChildren(people) {
 const useStore = create(
   persist(
     (set, get) => ({
+      // ── Hydration state ────────────────────────────────────────────────────
+      // IndexedDB storage is async, so persisted state isn't available on the
+      // first render; consumers should wait for this before deciding what to show.
+      hasHydrated: false,
+      setHasHydrated: (v) => set({ hasHydrated: v }),
+
       // ── Import state ───────────────────────────────────────────────────────
       rawHeaders: [],
       rawRows: [],
@@ -476,6 +491,10 @@ const useStore = create(
     {
       name: 'network-visualizer-v1',
       version: 2,
+      storage: createJSONStorage(() => idbStorage),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
       migrate: (persisted) => {
         // v0→v1: plain string per city → string[]
         // v1→v2: garbled char-arrays from old string spreading (e.g. [...'westcoast']

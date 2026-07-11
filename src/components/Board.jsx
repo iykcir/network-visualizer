@@ -74,9 +74,10 @@ export default function Board() {
     const current = overrides && overrides.length > 0
       ? overrides
       : (activeRegion ? [activeRegion] : []);
-    const next = active
+    const next = (active
       ? [...new Set([...current, region])]
-      : current.filter(r => r !== region);
+      : current.filter(r => r !== region)
+    ).filter(r => r !== '');
     setCityRegionOverride(city, next);
   }
 
@@ -113,7 +114,7 @@ export default function Board() {
     );
   }
 
-  const visibleCities = activeRegion ? getVisibleCitiesInRegion(activeRegion) : [];
+  const visibleCities = activeRegion !== null ? getVisibleCitiesInRegion(activeRegion) : [];
 
   return (
     <>
